@@ -68,5 +68,8 @@ a truncated jpg, a file held open with `FileShare.None`, and a file with a deny-
 - Messages for the user go to stderr (`warn`); only the report itself goes to stdout.
 - Output files are never overwritten silently (`unique_path`) unless `--overwrite`.
 - Exit codes: 0 ok, 1 error, 2 usage, 130 interrupted.
-- When adding or changing an option, update `build_parser`, the help epilog, and the
-  README option table together.
+- When adding or changing an option, update `build_parser`, the help epilog, the
+  README option table and `man/metadata.py.1` together. The man page (roff, `man(7)` macros)
+  carries the version and date in its `.TH` line - bump them with `__version__`/`__date__`.
+  No man renderer is guaranteed on Windows; check structure by reading it, and check that
+  every long option from `--help` appears (with `\-` escapes) in the page.

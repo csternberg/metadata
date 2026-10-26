@@ -140,6 +140,17 @@ Files are written to the **current directory** as `metadata.txt`, `metadata.csv`
 otherwise `metadata_01.xlsx`, `metadata_02.xlsx`, ... is used. If the target is locked
 (for example open in Excel) a new name is used automatically.
 
+## Manual page
+
+A unix man page is in [man/metadata.py.1](man/metadata.py.1). View it without installing:
+
+```
+man ./man/metadata.py.1
+```
+
+or install it, for example `sudo cp man/metadata.py.1 /usr/local/share/man/man1/` and then
+`man metadata.py`. It documents the same options, rules and exit codes as `--help`.
+
 ## Problem files
 
 A problem file never stops the run. It is listed with an *Error* (and repeated in a

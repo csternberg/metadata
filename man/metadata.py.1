@@ -1,0 +1,356 @@
+.\" Manual page for metadata.py. Keep in sync with README.md and "metadata.py --help".
+.TH METADATA.PY 1 "2026-10-26" "metadata.py 1.3.0" "User Commands"
+.SH NAME
+metadata.py \- collect and present metadata for video and image files
+.SH SYNOPSIS
+.B metadata.py
+.RB [ \-r ]
+.RB [ \-o
+.IR FORMAT ]
+.RB [ \-s
+.IR ORDER ]
+.RB [ \-t
+.IR KIND ]
+.RB [ \-e ]
+.RB [ \-k
+.IR MODE ]
+.RB [ \-x ]
+.RB [ \-b
+.IR NAME ]
+.RB [ \-d
+.IR CHAR ]
+.RB [ \-w ]
+.RB [ \-n ]
+.RB [ \-p ]
+.RB [ \-\-doubtful\-count
+.IR N ]
+.RB [ \-\-doubtful\-seconds
+.IR S ]
+.RI [ folder ]
+.br
+.B metadata.py
+.RB ( \-c " | " \-v " | " \-h )
+.SH DESCRIPTION
+.B metadata.py
+analyzes the video and image files in a folder, and optionally in all of its
+subfolders, and presents their metadata on the screen, as a text file, as a CSV
+file or as an Excel workbook.
+It replaces four earlier scripts (meta.py, metas.py, metas2.py, metax.py).
+.PP
+For videos it reports container, resolution, duration, video codec, bitrate (kb/s),
+frame rate, audio codec, size and file dates.
+For images it reports format, resolution, colour mode, size, file dates, the EXIF
+date taken and camera, GPS position when present, and an EXIF check
+(see
+.BR "EXIF CHECK" ).
+.PP
+.I folder
+defaults to the current directory.
+It may be given before or after the options.
+No argument is mandatory:
+.B metadata.py
+by itself lists the current folder, without subfolders, on the screen.
+.PP
+Switches are case-insensitive
+.RB ( \-R
+is the same as
+.BR \-r ,
+.B \-\-Recursive
+the same as
+.BR \-\-recursive )
+and every option has a unix-style long form;
+.BI \-\-name= value
+is accepted as well as
+.BI \-\-name " value" .
+Only the prerequisites needed for the files found and the outputs chosen are required.
+.SH OPTIONS
+.TP
+.BR \-r ", " \-\-recursive
+Include all subfolders.
+.TP
+.BR \-o ", " \-\-output " \fIFORMAT\fR"
+Where to write the result:
+.BR screen " (default), " txt ", " csv " or " xlsx .
+Give several as a comma-separated list or by repeating the option,
+for example
+.B \-o txt,xlsx
+or
+.BR "\-o txt \-o xlsx" .
+Files are written to the current directory as
+\fIbasename\fR.txt, \fIbasename\fR.csv and \fIbasename\fR.xlsx.
+.TP
+.BR \-s ", " \-\-sort " \fIORDER\fR"
+.B name
+orders by file name only, showing the folder in front of the name.
+.B folder
+orders by folder and then file name, with a summary for each folder.
+The default is
+.B folder
+together with
+.BR \-r ,
+otherwise
+.BR name .
+Without
+.B \-r
+there is only one folder and
+.B folder
+has no effect.
+.TP
+.BR \-t ", " \-\-type " \fIKIND\fR"
+.BR video ", " image " or " all
+(default).
+.TP
+.BR \-e ", " \-\-exif\-only
+List only images whose EXIF date taken is
+.BR valid ;
+see
+.BR "EXIF CHECK" .
+Implies
+.BR "\-\-type image" ,
+so videos are not probed, and cannot be combined with
+.BR "\-\-type video" .
+Unreadable images are left out.
+With
+.B \-n
+only the listed images are renamed.
+.TP
+.BR \-k ", " \-\-kinds " \fIMODE\fR"
+.B together
+(default) puts videos and images in one output.
+.B separate
+makes one output per kind: two sections on the screen, and files named
+\fIbasename\fR_video.* and \fIbasename\fR_image.*.
+A kind with no files produces no output.
+.TP
+.BR \-x ", " \-\-no\-blank\-lines
+When ordered by folder, csv and xlsx output normally get an empty row between
+folders.
+This option leaves them out, giving one unbroken table that is easier to sort and
+filter in Excel.
+In screen and text output it removes the gap after each folder summary.
+.TP
+.BR \-b ", " \-\-basename " \fINAME\fR"
+Base name of output files (default
+.BR metadata ).
+.TP
+.BR \-d ", " \-\-delimiter " \fICHAR\fR"
+CSV delimiter, a single character (default
+.BR , ).
+Use
+.B ;
+for European versions of Excel.
+CSV files are written as UTF-8 with a byte order mark.
+.TP
+.BR \-w ", " \-\-overwrite
+Overwrite existing output files.
+By default an existing file is kept and the output goes to
+\fIbasename\fR_01.\fIext\fR, \fIbasename\fR_02.\fIext\fR, and so on.
+If the target is locked, for example open in Excel, a new name is used in any case.
+.TP
+.BR \-n ", " \-\-rename
+Rename the files to add resolution, and for videos duration, to the name:
+.B holiday.mp4
+becomes
+.BR "holiday (1920x1080 - 0-02-03).mp4" ,
+.B photo.jpg
+becomes
+.BR "photo (4000x3000).jpg" .
+Existing files are never overwritten, files that already carry the suffix are skipped,
+and failures are reported per file.
+.TP
+.BR \-p ", " \-\-dry\-run
+With
+.BR \-n :
+only show what would be renamed.
+.TP
+.BI \-\-doubtful\-count " N"
+Number of images in a folder above which the doubtful check applies (default 20).
+.B 0
+switches the check off.
+.TP
+.BI \-\-doubtful\-seconds " S"
+Time span in seconds for the doubtful check (default 60).
+.TP
+.BR \-c ", " \-\-check
+Check the prerequisites, show how to install anything missing, and exit.
+.TP
+.BR \-v ", " \-\-version
+Show the version and exit.
+.TP
+.BR \-h ", " \-? ", " \-\-help
+Show the built-in help and exit.
+.SH EXIF CHECK
+Every image gets an EXIF check of its date taken.
+It is
+.B valid
+unless the date is
+.IP \(bu 2
+missing, or blank or zero, such as 0000:00:00 00:00:00;
+.IP \(bu 2
+not understandable as a date;
+.IP \(bu 2
+before 1990;
+.IP \(bu 2
+in the future;
+.IP \(bu 2
+more than one day after the file's creation or modification date, whichever is the
+earlier (copying a file changes its creation date, so the modification date is the
+safety net).
+.PP
+A midnight time on a real date is accepted.
+.PP
+A date that passes is still marked
+.B doubtful
+when its folder holds more than 20
+.RB ( \-\-doubtful\-count )
+such images whose dates all lie within 60 seconds
+.RB ( \-\-doubtful\-seconds )
+of each other, which points to a stuck or reset camera clock or to dates stamped by a
+batch tool.
+Folders are judged one by one, and only the date taken is compared.
+.B \-e
+lists only
+.B valid
+images, so doubtful ones are left out.
+.PP
+GPS position is always shown when present, as decimal degrees with south and west
+negative, plus altitude in metres.
+A position that is out of range, or the 0,0 placeholder some devices write, is ignored.
+.SH DAMAGED AND MISLABELED FILES
+The file content, not the extension, decides how a file is read.
+A JPEG named
+.B file1.mp4
+is reported as an image with a note, and a video named
+.B clip.jpg
+as a video.
+A file whose extension does not match its content is read normally and given a note.
+.PP
+A file that cannot be read is listed with an error and never stops the run.
+This covers files that are locked by another program, have no read permission, are
+empty, corrupt or truncated, or take more than 60 seconds to read.
+The files with errors are listed again on the terminal when the run ends.
+Folders that cannot be read give a warning and the scan continues.
+.SH PREREQUISITES
+Python 3.8 or newer is always needed.
+.TP
+.B ffprobe
+Part of FFmpeg; needed for video files.
+.TP
+.B Pillow
+Python imaging library; needed for image files.
+.TP
+.B openpyxl
+Needed for Excel output.
+.PP
+Before any work is done the script checks what is needed and, if something is missing,
+stops and prints the install command for the platform, for example
+.B "winget install Gyan.FFmpeg"
+or
+.BR "python \-m pip install pillow openpyxl" .
+.SH EXIT STATUS
+.TP
+.B 0
+Done.
+Files with errors are reported but are not fatal.
+.TP
+.B 1
+A prerequisite is missing, the folder was not found, no matching files were found, or
+an output file could not be written.
+.TP
+.B 2
+Bad command line.
+.TP
+.B 130
+Interrupted with Ctrl+C.
+.SH EXAMPLES
+List the current folder on the screen:
+.PP
+.RS
+.nf
+metadata.py
+.fi
+.RE
+.PP
+Recursive Excel workbook, ordered by folder and then file name:
+.PP
+.RS
+.nf
+metadata.py \-r \-o xlsx
+.fi
+.RE
+.PP
+Recursive, ordered by file name only, as a text file:
+.PP
+.RS
+.nf
+metadata.py /data/media \-R \-S name \-o txt
+.fi
+.RE
+.PP
+Images only, as a CSV file for European Excel:
+.PP
+.RS
+.nf
+metadata.py \-\-type image \-o csv \-d ";"
+.fi
+.RE
+.PP
+Separate Excel files for videos and images:
+.PP
+.RS
+.nf
+metadata.py \-r \-k separate \-o xlsx
+.fi
+.RE
+.PP
+Only images with a trustworthy EXIF date:
+.PP
+.RS
+.nf
+metadata.py \-r \-e \-o xlsx
+.fi
+.RE
+.PP
+Preview renaming, then do it:
+.PP
+.RS
+.nf
+metadata.py \-n \-p
+metadata.py \-n
+.fi
+.RE
+.SH FILES
+.TP
+\fIbasename\fR.txt, \fIbasename\fR.csv, \fIbasename\fR.xlsx
+Output files, written to the current directory.
+.SH NOTES
+The earlier scripts used different switches.
+Mapping:
+.B \-N
+is now
+.BR \-n ,
+.B \-O
+is now
+.BR \-w ,
+.BR \-CU / \-CE
+are
+.B \-o csv
+(with
+.B \-d ";"
+for the European style),
+.B \-XLSX
+is
+.BR "\-o xlsx" ,
+and
+.B \-S
+is now
+.BR "\-s name|folder" .
+Per-file output files and file-name patterns were dropped in favour of
+.BR \-\-type .
+.SH SEE ALSO
+.BR ffprobe (1),
+.BR ffmpeg (1)
+.PP
+Project page: https://github.com/csternberg/metadata
+.SH AUTHOR
+Written with Claude Code.
