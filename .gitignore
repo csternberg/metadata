@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+# generated reports
+metadata*.txt
+metadata*.csv
+metadata*.xlsx
+
+# superseded scripts (local copies only)
+/meta.py
+/metas.py
+/metas2.py
+/metax.py
