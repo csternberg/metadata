@@ -4,14 +4,41 @@ Collect and present metadata for **video and image files** in a folder, optional
 including all subfolders. Output goes to the screen, a text file, a CSV file or an
 Excel sheet.
 
-Current version: **1.1.0** (2026-10-26). Check with `metadata.py --version`.
+Current version: **1.3.0** (2026-10-26). Check with `metadata.py --version`.
 
 ## What it reports
 
 | Kind  | Fields |
 |-------|--------|
 | Video | container, resolution, duration, video codec, bitrate (kb/s), frame rate, audio codec, size, modified date |
-| Image | format, resolution, colour mode, size, modified date, EXIF date taken and camera (when present) |
+| Image | format, resolution, colour mode, size, created and modified date, EXIF date taken and camera, GPS latitude/longitude/altitude (when present), EXIF check |
+
+### EXIF check and GPS
+
+Images always show GPS position (decimal degrees, south and west negative) when the file
+has it; a missing, out-of-range or `0,0` placeholder position is ignored. Every image also
+gets an **EXIF check** of its *date taken*, which is `valid` unless it is:
+
+- missing, or blank/zero (`0000:00:00 00:00:00`)
+- not understandable as a date
+- before 1990 (typical of a reset camera clock)
+- in the future
+- more than one day after the file's creation or modification date (the earlier of the
+  two is used; copying a file changes its creation date, so modification is the safety net)
+
+A midnight time such as `2020:05:01 00:00:00` on a real date is accepted.
+
+**Doubtful dates.** A date that passes those tests is changed from `valid` to
+`doubtful: ...` when its folder holds *more than 20* such images whose dates all lie
+within *60 seconds* of each other (a stuck or reset camera clock, or dates stamped by a
+batch tool). Folders are judged one by one, and `-e` leaves doubtful images out. Tune with
+`--doubtful-count N` (default 20, `0` switches the check off) and `--doubtful-seconds S`
+(default 60). Only the date taken is compared.
+
+Use `-e` / `--exif-only` to list **only** images that pass. It implies `--type image`
+(videos are not probed, which also makes the scan faster), is incompatible with
+`--type video`, and leaves out unreadable images. With `--rename`, only the listed
+images are renamed.
 
 Every listing ends with a grand summary (file count, video/image split, total size)
 and, when grouped by folder, a summary per folder.
@@ -55,6 +82,8 @@ metadata.py [folder] [options]
 | `-o FORMAT` | `--output` | `screen` (default), `txt`, `csv`, `xlsx`; comma separated or repeated |
 | `-s ORDER` | `--sort` | `name` or `folder` (default: `folder` with `-r`, otherwise `name`) |
 | `-t KIND` | `--type` | `video`, `image` or `all` (default) |
+| | `--doubtful-count N`, `--doubtful-seconds S` | thresholds for the "doubtful" EXIF check (defaults 20 and 60) |
+| `-e` | `--exif-only` | list only images with valid EXIF (see above); implies `--type image` |
 | `-k MODE` | `--kinds` | `together` (default): videos and images in one output; `separate`: one output per kind |
 | `-x` | `--no-blank-lines` | when ordered by folder, leave out the blank line between folders |
 | `-b NAME` | `--basename` | base name of output files (default `metadata`) |
@@ -151,6 +180,13 @@ The per-file output option `-F` and file-name patterns were dropped; use `--type
 
 ## Changelog
 
+- **1.3.0** (2026-10-26): EXIF dates are marked "doubtful" when a folder has more than 20
+  images all dated within 60 seconds (`--doubtful-count`, `--doubtful-seconds`).
+- **1.2.0** (2026-10-26): GPS position, file creation date and an EXIF date check for
+  images; `--exif-only` to list only images with valid EXIF.
+- **1.1.1** (2026-10-26): fixed Excel output failing ("cannot be used in worksheets") when
+  EXIF text such as the camera name contained NUL/control characters; such text is now
+  cleaned in all outputs, and "Make Model" no longer repeats the make.
 - **1.1.0** (2026-10-26): `--kinds together|separate` for one combined or two per-kind
   outputs; blank line/row between folders when ordered by folder (default), `-x` to omit.
 - **1.0.0** (2026-10-26): first unified release. Video and image support; screen, txt, csv

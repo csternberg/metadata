@@ -47,6 +47,12 @@ a truncated jpg, a file held open with `FileShare.None`, and a file with a deny-
   `_video`/`_image` file-name suffix) for `separate`. Writers take a record subset, so
   summaries are per output. `blank_between` (folder grouping + not `-x`) inserts empty
   csv/xlsx rows when the folder changes.
+- EXIF: `probe_image` reads date/camera/GPS (`read_gps`); `check_exif` returns "valid" or the
+  reason, using the earlier of creation/modification time. `--exif-only` filters on
+  `exif_status == "valid"` right after analysis (before rename/sort) and forces `--type image`.
+  `mark_doubtful` is a second, per-folder pass (runs before the `-e` filter) that downgrades
+  "valid" to "doubtful: ..." for bursts of near-identical dates; status strings starting with
+  "doubtful" are never "valid". The validity rules are documented in the README; keep both in sync.
 - Records are dicts; `COLUMNS` maps headers to record keys for csv/xlsx; `record_text` /
   `render_text` produce the screen and txt layout.
 - `require()` / `prerequisite_status()` / `run_check()` implement the prerequisite checks and

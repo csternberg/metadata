@@ -15,6 +15,7 @@ if sys.version_info < (3, 8):
 import argparse
 import csv
 import json
+import math
 import os
 import re
 import shutil
@@ -22,7 +23,7 @@ import subprocess
 from datetime import datetime
 from pathlib import Path
 
-__version__ = "1.1.0"
+__version__ = "1.3.0"
 __date__ = "2026-10-26"
 PROG = "metadata.py"
 
@@ -45,8 +46,10 @@ COLUMNS = [
     ("Duration", "duration_text"), ("Video codec / colour mode", "codec"),
     ("Bitrate (kb/s)", "bitrate_kbps"), ("FPS", "fps"),
     ("Audio codec", "audio"), ("Size (bytes)", "bytes"),
-    ("Modified", "modified"), ("Date taken", "taken"),
-    ("Camera", "camera"), ("Note", "note"), ("Error", "error"),
+    ("Created", "created"), ("Modified", "modified"), ("Date taken", "taken"),
+    ("Camera", "camera"), ("Latitude", "gps_lat"), ("Longitude", "gps_lon"),
+    ("Altitude (m)", "gps_alt"), ("EXIF check", "exif_status"),
+    ("Note", "note"), ("Error", "error"),
 ]
 
 # Which tools are usable; filled in by main() after the prerequisite check.
@@ -190,6 +193,14 @@ def to_float(value):
         return None
 
 
+def clean_text(value):
+    """Strip control characters (e.g. NUL padding in EXIF) and squeeze whitespace.
+    Excel refuses such characters, and they garble text and csv output."""
+    if not isinstance(value, str):
+        return value
+    return " ".join(re.sub(r"[\x00-\x1f\x7f]", " ", value).split())
+
+
 def friendly_error(e):
     """Turn an exception into a short message a user can act on."""
     if isinstance(e, PermissionError):
@@ -275,13 +286,107 @@ def probe_image(path):
             exif = img.getexif()
             taken = exif.get_ifd(0x8769).get(36867) or exif.get(306)  # DateTimeOriginal / DateTime
             if taken:
-                out["taken"] = str(taken).strip()
-            camera = " ".join(str(exif[t]).strip() for t in (271, 272) if exif.get(t))
+                out["taken"] = clean_text(str(taken))
+            make, model = (clean_text(str(exif.get(t) or "")) for t in (271, 272))
+            if model.lower().startswith(make.lower()):
+                make = ""  # model already includes the make
+            camera = f"{make} {model}".strip()
             if camera:
                 out["camera"] = camera
+            out.update(read_gps(exif))
         except Exception:
             pass  # missing or damaged EXIF is not an error
     return out
+
+
+def dms_to_degrees(dms, ref):
+    """EXIF (degrees, minutes, seconds) + hemisphere letter -> signed decimal degrees."""
+    d, m, s = (float(x) for x in dms)
+    value = d + m / 60 + s / 3600
+    if not math.isfinite(value):
+        raise ValueError("bad GPS value")
+    return -value if str(ref).strip().upper()[:1] in ("S", "W") else value
+
+
+def read_gps(exif):
+    """Return gps_lat / gps_lon / gps_alt if the image has plausible GPS data, else {}."""
+    try:
+        gps = exif.get_ifd(0x8825)
+        lat = dms_to_degrees(gps[2], gps[1])
+        lon = dms_to_degrees(gps[4], gps[3])
+    except Exception:
+        return {}
+    if abs(lat) > 90 or abs(lon) > 180 or (lat == 0 and lon == 0):
+        return {}  # out of range, or the "0,0" placeholder many devices write
+    out = {"gps_lat": round(lat, 6), "gps_lon": round(lon, 6)}
+    try:
+        alt = float(gps[6])
+        if math.isfinite(alt):
+            out["gps_alt"] = round(-alt if gps.get(5) in (1, b"\x01") else alt, 1)
+    except Exception:
+        pass
+    return out
+
+
+DATE_FORMATS = ("%Y:%m:%d %H:%M:%S", "%Y-%m-%d %H:%M:%S", "%Y:%m:%d %H:%M", "%Y:%m:%d")
+MIN_PLAUSIBLE_YEAR = 1990
+CREATION_TOLERANCE = 24 * 3600  # EXIF has no time zone; allow a day of slack
+
+
+def parse_taken(taken):
+    """EXIF date text -> datetime, or None if it cannot be understood."""
+    for fmt in DATE_FORMATS:
+        try:
+            return datetime.strptime(taken[:19] if "%H" in fmt else taken[:10], fmt)
+        except ValueError:
+            continue
+    return None
+
+
+def mark_doubtful(records, min_count, max_seconds):
+    """Flag "valid" dates as doubtful when a folder holds more than min_count images
+    whose dates all fall within max_seconds of each other (typically a reset or
+    constant camera clock, or dates stamped by a batch tool). Returns (images, folders)."""
+    if min_count <= 0:
+        return 0, 0
+    by_folder = {}
+    for r in records:
+        if r.get("exif_status") == "valid":
+            by_folder.setdefault(r["folder"], []).append((parse_taken(r["taken"]), r))
+    images = folders = 0
+    for group in by_folder.values():
+        if len(group) <= min_count:
+            continue
+        times = [t for t, _ in group]
+        spread = (max(times) - min(times)).total_seconds()
+        if spread < max_seconds:
+            folders += 1
+            images += len(group)
+            for _, r in group:
+                r["exif_status"] = (f"doubtful: {len(group)} images in this folder "
+                                    f"have dates within {spread:.0f} s of each other")
+    return images, folders
+
+
+def check_exif(taken, earliest_ts):
+    """Return "valid" or the reason the EXIF date taken cannot be trusted.
+
+    earliest_ts: the earlier of the file's creation and modification time (epoch seconds).
+    """
+    if not taken:
+        return "no date taken"
+    if not re.search(r"[1-9]", taken.split()[0] if taken.split() else ""):
+        return "date taken is blank/zero"  # e.g. 0000:00:00 00:00:00
+    when = parse_taken(taken)
+    if when is None:
+        return f"date taken not understood ({taken})"
+    if when.year < MIN_PLAUSIBLE_YEAR:
+        return f"date taken before {MIN_PLAUSIBLE_YEAR}"
+    if when > datetime.now():
+        return "date taken is in the future"
+    if earliest_ts is not None and when.timestamp() > earliest_ts + CREATION_TOLERANCE:
+        return "date taken is after the file creation/modification date"
+    return "valid"
 
 
 PROBES = {"video": probe_video, "image": probe_image}
@@ -296,6 +401,11 @@ def analyze(path, root, labeled):
         st = path.stat()
         rec["bytes"] = st.st_size
         rec["modified"] = datetime.fromtimestamp(st.st_mtime).strftime("%Y-%m-%d %H:%M:%S")
+        # creation time: st_birthtime (Windows 3.12+/macOS), else st_ctime on Windows only
+        created = getattr(st, "st_birthtime", None) or (st.st_ctime if os.name == "nt" else None)
+        if created:
+            rec["created"] = datetime.fromtimestamp(created).strftime("%Y-%m-%d %H:%M:%S")
+        earliest_ts = min(t for t in (created, st.st_mtime) if t)
         if st.st_size == 0:
             rec["error"] = "Empty file (0 bytes)"
             return rec
@@ -320,6 +430,8 @@ def analyze(path, root, labeled):
         container = fields.pop("_container", None)
         rec.update(fields)
         rec["type"] = kind
+        if kind == "image":
+            rec["exif_status"] = check_exif(rec.get("taken"), earliest_ts)
         ext = path.suffix.lower()
         what = f"{fields['format']} {kind}"
         if kind != labeled:
@@ -438,9 +550,16 @@ def record_text(rec, show_path):
                 lines.append(f"  Date taken: {rec['taken']}")
             if "camera" in rec:
                 lines.append(f"  Camera: {rec['camera']}")
+            if "gps_lat" in rec:
+                alt = f", altitude {rec['gps_alt']} m" if "gps_alt" in rec else ""
+                lines.append(f"  GPS: {rec['gps_lat']}, {rec['gps_lon']}{alt}")
+            if "exif_status" in rec:
+                lines.append(f"  EXIF check: {rec['exif_status']}")
     if "note" in rec:
         lines.append(f"  Note: {rec['note']}")
     lines.append(f"  Size: {human_size(rec['bytes'])} ({rec['bytes']} bytes)")
+    if "created" in rec:
+        lines.append(f"  Created: {rec['created']}")
     if "modified" in rec:
         lines.append(f"  Modified: {rec['modified']}")
     return "\n".join(lines) + "\n"
@@ -482,7 +601,7 @@ def render_text(records, grouped, root, blank=True, title=""):
 
 
 def row_values(rec):
-    return [rec.get(key) for _, key in COLUMNS]
+    return [clean_text(rec.get(key)) for _, key in COLUMNS]
 
 
 def write_csv(path, records, delimiter, blank_between=False):
@@ -611,6 +730,18 @@ blank lines (-x):
   to sort/filter in Excel). In txt/screen it removes the gap after each
   folder summary.
 
+EXIF and GPS:
+  Images always show date taken, camera and, when present, GPS (latitude,
+  longitude, altitude) plus an "EXIF check". -e lists ONLY images whose date
+  taken is trustworthy. It is rejected when it is missing, blank/zero
+  (0000:00:00 00:00:00), not understood, before 1990, in the future, or more
+  than a day after the file's creation/modification date (the earlier of the
+  two is used). Videos are skipped with -e. Unreadable images are left out too.
+  A date that passes is still marked "doubtful" (and left out by -e) when a
+  folder holds more than 20 such images whose dates all lie within 60 seconds
+  of each other. Change with --doubtful-count N / --doubtful-seconds S
+  (--doubtful-count 0 turns the check off).
+
 mis-labeled and damaged files:
   The file *content* decides how a file is read, not its extension. A JPEG
   named clip.mp4 is reported as an image with a "Note". Locked, unreadable,
@@ -624,6 +755,7 @@ examples:
   {PROG} -n -p                    preview renaming (adds resolution/duration)
   {PROG} -r -k separate -o xlsx   separate Excel files for videos and images
   {PROG} -r -o csv -x             recursive CSV without blank rows between folders
+  {PROG} -r -e -o xlsx            recursive list of images with valid EXIF only
   {PROG} --check                  verify prerequisites and show how to install
 
 prerequisites:
@@ -678,6 +810,13 @@ def build_parser():
                     help="name | folder (default: folder with -r, otherwise name)")
     ap.add_argument("-t", "--type", type=str.lower, choices=["video", "image", "all"],
                     default="all", help="video | image | all (default: all)")
+    ap.add_argument("-e", "--exif-only", action="store_true",
+                    help="list only images with valid EXIF (implies --type image)")
+    ap.add_argument("--doubtful-count", type=int, default=20, metavar="N",
+                    help="mark EXIF dates doubtful when a folder has more than N images "
+                         "taken within --doubtful-seconds of each other (default 20; 0 = off)")
+    ap.add_argument("--doubtful-seconds", type=int, default=60, metavar="S",
+                    help="time span for the doubtful check (default 60)")
     ap.add_argument("-k", "--kinds", type=str.lower, choices=["together", "separate"],
                     default="together",
                     help="together: videos and images in one output (default); "
@@ -724,7 +863,12 @@ def run(args):
     if mode == "folder" and not args.recursive and args.sort:
         warn("Note: --sort folder has no effect without --recursive.")
 
-    # fail early, before the slow part, if Excel output cannot work
+    if args.exif_only:
+        if args.type == "video":
+            warn("--exif-only lists images only; it cannot be combined with --type video.")
+            return 2
+        args.type = "image"  # videos have no EXIF, so don't even probe them
+
     files = find_files(root, args.recursive, args.type)
     if not files:
         warn("No video or image files found" + ("" if args.recursive else
@@ -742,6 +886,21 @@ def run(args):
         records.append(analyze(p, root, k))
     if show_progress:
         print(file=sys.stderr)
+
+    doubtful_images, doubtful_folders = mark_doubtful(
+        records, args.doubtful_count, args.doubtful_seconds)
+    if doubtful_images:
+        warn(f"{doubtful_images} images in {doubtful_folders} "
+             f"folder{'s' * (doubtful_folders != 1)} have doubtful EXIF dates.")
+
+    if args.exif_only:
+        total = len(records)
+        records = [r for r in records if r.get("exif_status") == "valid"]
+        warn(f"EXIF filter: {len(records)} of {total} images have valid EXIF "
+             f"({total - len(records)} left out).")
+        if not records:
+            warn("No images with valid EXIF found.")
+            return 1
 
     if args.rename:
         for rec in records:
