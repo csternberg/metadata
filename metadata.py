@@ -23,7 +23,7 @@ import subprocess
 from datetime import datetime
 from pathlib import Path
 
-__version__ = "1.3.0"
+__version__ = "1.3.1"
 __date__ = "2026-10-26"
 PROG = "metadata.py"
 
@@ -47,6 +47,7 @@ COLUMNS = [
     ("Bitrate (kb/s)", "bitrate_kbps"), ("FPS", "fps"),
     ("Audio codec", "audio"), ("Size (bytes)", "bytes"),
     ("Created", "created"), ("Modified", "modified"), ("Date taken", "taken"),
+    ("EXIF save date", "exif_modified"),
     ("Camera", "camera"), ("Latitude", "gps_lat"), ("Longitude", "gps_lon"),
     ("Altitude (m)", "gps_alt"), ("EXIF check", "exif_status"),
     ("Note", "note"), ("Error", "error"),
@@ -284,7 +285,13 @@ def probe_image(path):
                "_ext_ok": IMAGE_FORMAT_FOR_EXT.get(path.suffix.lower()) == img.format}
         try:
             exif = img.getexif()
-            taken = exif.get_ifd(0x8769).get(36867) or exif.get(306)  # DateTimeOriginal / DateTime
+            sub = exif.get_ifd(0x8769)
+            # Capture date only: DateTimeOriginal, else DateTimeDigitized. The plain
+            # DateTime tag (306) is when software last saved the file, not when it was taken.
+            taken = sub.get(36867) or exif.get(36867) or sub.get(36868)
+            modified = exif.get(306)
+            if modified:
+                out["exif_modified"] = clean_text(str(modified))
             if taken:
                 out["taken"] = clean_text(str(taken))
             make, model = (clean_text(str(exif.get(t) or "")) for t in (271, 272))
@@ -368,13 +375,14 @@ def mark_doubtful(records, min_count, max_seconds):
     return images, folders
 
 
-def check_exif(taken, earliest_ts):
+def check_exif(taken, earliest_ts, has_exif_modified=False):
     """Return "valid" or the reason the EXIF date taken cannot be trusted.
 
     earliest_ts: the earlier of the file's creation and modification time (epoch seconds).
     """
     if not taken:
-        return "no date taken"
+        return ("no date taken (only the EXIF save date is present)" if has_exif_modified
+                else "no date taken")
     if not re.search(r"[1-9]", taken.split()[0] if taken.split() else ""):
         return "date taken is blank/zero"  # e.g. 0000:00:00 00:00:00
     when = parse_taken(taken)
@@ -431,7 +439,8 @@ def analyze(path, root, labeled):
         rec.update(fields)
         rec["type"] = kind
         if kind == "image":
-            rec["exif_status"] = check_exif(rec.get("taken"), earliest_ts)
+            rec["exif_status"] = check_exif(rec.get("taken"), earliest_ts,
+                                            "exif_modified" in rec)
         ext = path.suffix.lower()
         what = f"{fields['format']} {kind}"
         if kind != labeled:
@@ -548,6 +557,8 @@ def record_text(rec, show_path):
             lines.append(f"  Colour mode: {rec.get('codec', 'N/A')}")
             if "taken" in rec:
                 lines.append(f"  Date taken: {rec['taken']}")
+            if "exif_modified" in rec:
+                lines.append(f"  EXIF save date: {rec['exif_modified']}")
             if "camera" in rec:
                 lines.append(f"  Camera: {rec['camera']}")
             if "gps_lat" in rec:
@@ -733,7 +744,9 @@ blank lines (-x):
 EXIF and GPS:
   Images always show date taken, camera and, when present, GPS (latitude,
   longitude, altitude) plus an "EXIF check". -e lists ONLY images whose date
-  taken is trustworthy. It is rejected when it is missing, blank/zero
+  taken is trustworthy. Only the capture date (DateTimeOriginal/Digitized)
+  counts; the "EXIF save date" (when software last saved the file) does not.
+  It is rejected when it is missing, blank/zero
   (0000:00:00 00:00:00), not understood, before 1990, in the future, or more
   than a day after the file's creation/modification date (the earlier of the
   two is used). Videos are skipped with -e. Unreadable images are left out too.

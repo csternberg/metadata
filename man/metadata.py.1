@@ -1,5 +1,5 @@
 .\" Manual page for metadata.py. Keep in sync with README.md and "metadata.py --help".
-.TH METADATA.PY 1 "2026-10-26" "metadata.py 1.3.0" "User Commands"
+.TH METADATA.PY 1 "2026-10-26" "metadata.py 1.3.1" "User Commands"
 .SH NAME
 metadata.py \- collect and present metadata for video and image files
 .SH SYNOPSIS
@@ -185,7 +185,10 @@ It is
 .B valid
 unless the date is
 .IP \(bu 2
-missing, or blank or zero, such as 0000:00:00 00:00:00;
+missing, or blank or zero, such as 0000:00:00 00:00:00
+(only the capture date, DateTimeOriginal or DateTimeDigitized, counts; the plain EXIF
+DateTime tag is when software last saved the file and is shown separately as the EXIF
+save date);
 .IP \(bu 2
 not understandable as a date;
 .IP \(bu 2

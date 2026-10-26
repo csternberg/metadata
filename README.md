@@ -4,7 +4,7 @@ Collect and present metadata for **video and image files** in a folder, optional
 including all subfolders. Output goes to the screen, a text file, a CSV file or an
 Excel sheet.
 
-Current version: **1.3.0** (2026-10-26). Check with `metadata.py --version`.
+Current version: **1.3.1** (2026-10-26). Check with `metadata.py --version`.
 
 ## What it reports
 
@@ -19,7 +19,11 @@ Images always show GPS position (decimal degrees, south and west negative) when 
 has it; a missing, out-of-range or `0,0` placeholder position is ignored. Every image also
 gets an **EXIF check** of its *date taken*, which is `valid` unless it is:
 
-- missing, or blank/zero (`0000:00:00 00:00:00`)
+- missing, or blank/zero (`0000:00:00 00:00:00`). Only the capture date
+  (`DateTimeOriginal`, else `DateTimeDigitized`) counts. The plain EXIF `DateTime` tag is
+  when software last saved the file, so it is shown separately as *EXIF save date* and does
+  not make an image valid (typical of images exported from an editor with the camera data
+  stripped)
 - not understandable as a date
 - before 1990 (typical of a reset camera clock)
 - in the future
@@ -191,6 +195,9 @@ The per-file output option `-F` and file-name patterns were dropped; use `--type
 
 ## Changelog
 
+- **1.3.1** (2026-10-26): bug fix. The EXIF save date (`DateTime`) was used as a fallback
+  for date taken, so re-saved images without a capture date were reported `valid`. Now
+  they are `no date taken (only the EXIF save date is present)`. New column *EXIF save date*.
 - **1.3.0** (2026-10-26): EXIF dates are marked "doubtful" when a folder has more than 20
   images all dated within 60 seconds (`--doubtful-count`, `--doubtful-seconds`).
 - **1.2.0** (2026-10-26): GPS position, file creation date and an EXIF date check for
