@@ -23,8 +23,8 @@ import subprocess
 from datetime import datetime
 from pathlib import Path
 
-__version__ = "1.3.1"
-__date__ = "2026-10-26"
+__version__ = "1.3.2"
+__date__ = "2026-11-02"
 PROG = "metadata.py"
 
 VIDEO_EXTENSIONS = {".mp4", ".mov", ".avi", ".mkv", ".m4v", ".webm", ".flv",
@@ -456,6 +456,15 @@ def analyze(path, root, labeled):
 # file discovery and ordering
 # --------------------------------------------------------------------------
 
+SKIP_DIRS = {"$recycle.bin", "recycler", "system volume information", ".trashes"}
+
+
+def skip_dir(name):
+    """Trash and system folders are never scanned (silently), at any depth."""
+    low = name.lower()
+    return low in SKIP_DIRS or low.startswith(".trash")
+
+
 def find_files(root, recursive, types):
     exts = {}
     if types in ("video", "all"):
@@ -469,7 +478,8 @@ def find_files(root, recursive, types):
     candidates = []
     try:
         if recursive:
-            for d, _, files in os.walk(root, onerror=skipped):
+            for d, dirs, files in os.walk(root, onerror=skipped):
+                dirs[:] = [x for x in dirs if not skip_dir(x)]
                 candidates.extend(Path(d) / f for f in files)
         else:
             candidates = list(root.iterdir())
@@ -816,7 +826,7 @@ def build_parser():
     ap.add_argument("folder", nargs="?", default=".",
                     help="folder to analyze (default: current folder)")
     ap.add_argument("-r", "--recursive", action="store_true",
-                    help="include subfolders")
+                    help="include subfolders (trash/system folders are skipped)")
     ap.add_argument("-o", "--output", action="append", type=parse_outputs, metavar="FORMAT",
                     help="screen (default), txt, csv, xlsx; comma separated or repeated")
     ap.add_argument("-s", "--sort", type=str.lower, choices=["name", "folder"],

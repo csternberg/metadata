@@ -1,5 +1,5 @@
 .\" Manual page for metadata.py. Keep in sync with README.md and "metadata.py --help".
-.TH METADATA.PY 1 "2026-10-26" "metadata.py 1.3.1" "User Commands"
+.TH METADATA.PY 1 "2026-11-02" "metadata.py 1.3.2" "User Commands"
 .SH NAME
 metadata.py \- collect and present metadata for video and image files
 .SH SYNOPSIS
@@ -67,6 +67,7 @@ Only the prerequisites needed for the files found and the outputs chosen are req
 .TP
 .BR \-r ", " \-\-recursive
 Include all subfolders.
+Trash and system folders (\fI$RECYCLE.BIN\fR, \fISystem Volume Information\fR, \fI.Trash*\fR, ...) are skipped silently.
 .TP
 .BR \-o ", " \-\-output " \fIFORMAT\fR"
 Where to write the result:

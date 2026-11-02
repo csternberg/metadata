@@ -82,7 +82,7 @@ metadata.py [folder] [options]
 
 | Option | Long form | Meaning |
 |--------|-----------|---------|
-| `-r` | `--recursive` | include subfolders |
+| `-r` | `--recursive` | include subfolders (trash and system folders such as `$RECYCLE.BIN`, `System Volume Information` and `.Trash*` are skipped silently) |
 | `-o FORMAT` | `--output` | `screen` (default), `txt`, `csv`, `xlsx`; comma separated or repeated |
 | `-s ORDER` | `--sort` | `name` or `folder` (default: `folder` with `-r`, otherwise `name`) |
 | `-t KIND` | `--type` | `video`, `image` or `all` (default) |
@@ -195,6 +195,9 @@ The per-file output option `-F` and file-name patterns were dropped; use `--type
 
 ## Changelog
 
+- **1.3.2** (2026-11-02): trash and system folders (`$RECYCLE.BIN`, `RECYCLER`,
+  `System Volume Information`, `.Trashes`, `.Trash*`) are skipped silently with `-r`, so
+  `--rename` can no longer touch files in them.
 - **1.3.1** (2026-10-26): bug fix. The EXIF save date (`DateTime`) was used as a fallback
   for date taken, so re-saved images without a capture date were reported `valid`. Now
   they are `no date taken (only the EXIF save date is present)`. New column *EXIF save date*.
